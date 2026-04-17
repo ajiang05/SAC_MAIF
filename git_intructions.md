@@ -2,7 +2,7 @@ Okay so guys here’s a serious set of steps to follow every single time you wan
 
 1. Switch to your local main branch using vsc/terminal
 2. Do a git pull
-3. Swap back to your local name branch (mine would be tanishq)
+3. Swap back to your local name branch (mine would be Aidan)
 4. Do a git fetch origin
 5. Then do a git merge origin/main into your current branch
 
