@@ -27,9 +27,13 @@ class training(gym.Env):
     self.balance = 100000
 
     def reset():
-
+        return
     def step(self, action):
+        # We start by getting "today's" date and data before we move forward in time
         today_date = self.dates[self.curr_step]
+        today_data = self.data.loc[today_date]
+
+
         return
 
 
