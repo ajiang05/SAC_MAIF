@@ -13,8 +13,10 @@ feature_cols = [
     "MACD", "MACD_signal"
 ]
 
+#turns the row labels to just 0 to whatever number
 df_reset = val_data.reset_index() 
- 
+
+#Makes all the tickers and indicators in one row with only dates as the row label
 pivot_features = df_reset.pivot_table( 
 index="Date", 
 columns="Ticker",

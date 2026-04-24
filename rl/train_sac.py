@@ -13,13 +13,17 @@ feature_cols = [
     "MACD", "MACD_signal"
 ]
 
+#turns row labels to numbers from 0 to len(row) and pushes the dates to the right, so column size increases by 1
 df_reset = train_data.reset_index() 
- 
+
+#creates multi level index with the features first then the tickers
 pivot_features = df_reset.pivot_table( 
 index="Date", 
 columns="Ticker",
 values=feature_cols 
 )
+
+print(pivot_features)
 
 pivot_features = pivot_features.ffill().bfill() 
 
@@ -33,7 +37,9 @@ columns="Ticker",
 values="Close" 
 )
 
+#creates a df for the percent change between current row and previous row. Basically yesterday to today percent change
 returns = price_df.pct_change().dropna() 
+#We get rid of row 0 to match with returns which got rid of first day(there is no yesterday yet)
 features = pivot_features.iloc[1:] 
 returns = returns[["SPY", "QQQ", "TLT"]] 
 
