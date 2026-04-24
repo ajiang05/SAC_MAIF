@@ -5,7 +5,9 @@ import numpy as np #numpy is a library for numerical computing
 class trading_env(gym.Env):
     def __init__(self, features, returns):
         super().__init__()
+        #Get the values so it gets rid of column and row names. This is better for RL models because they suck at reading row/col names
         self.features =  features.values
+        #It is the number how how the INDEX changed 
         self.returns = returns.values
 
         self.tickers = ['SPY', 'QQQ', 'TLT']
@@ -33,7 +35,7 @@ class trading_env(gym.Env):
 
     #get the observation of the current state
     def getObservation(self):
-        return np.concatenate([self.features[self.t], self.weights]).astype(np.float32) #concatenate the features and the weights to get the observation
+        return np.concatenate([self.features[self.t], self.weights]).astype(np.float32) #concatenate the features of the current time and the weights to get the observation
 
     #reset the environment to the initial state
     def reset(self, seed=None, options=None):
@@ -49,7 +51,7 @@ class trading_env(gym.Env):
         previousWeights = self.weights
         assetReturns = self.returns[self.t] #get the asset returns for the current time step
         portfolioReturn = np.dot(assetReturns, newWeights) #calculate the portfolio return (profit or loss)
-        turnover = np.sum(np.abs(newWeights - previousWeights))
+        turnover = np.sum(np.abs(newWeights - previousWeights))#The turnover punishes protfolio weight changes 
         reward = portfolioReturn - 0.0003 * turnover
         self.weights = newWeights
         self.t += 1
