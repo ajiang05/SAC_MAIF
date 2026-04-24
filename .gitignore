@@ -40,3 +40,7 @@ tensorboard_logs/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Model artifacts 
+*.pkl
+*.zip
