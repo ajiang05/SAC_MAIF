@@ -42,6 +42,7 @@ class trading_env(gym.Env):
         super().reset(seed=seed) #reset the environment to the initial state
         self.weights = np.ones(self.numAssets) / self.numAssets #set the weights to be equal
         self.t = 0 #set the time step to 0
+        #The second parameter(the dict) is information that we can get if we want it within the evaluation step
         return self.getObservation(), {} 
 
 
