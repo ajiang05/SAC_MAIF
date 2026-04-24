@@ -94,7 +94,7 @@ returns = returns[["SPY", "QQQ", "TLT"]] #only keeps the returns for the tickers
 env = trading_env(features, returns)
 
 #Load the model
-model = SAC.load("sac_training_model") #load the model
+model = SAC.load("rl/model/sac_training_model") #load the model
 obs, _ = env.reset() #reset the environment
 model_rewards = []
 #Loop through the returns and step the environment forward by one time step
