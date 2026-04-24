@@ -3,6 +3,7 @@ from env import trading_env
 import numpy as np
 from stable_baselines3 import SAC
 import pickle
+import datetime
 
 #Load the training data (same as test_env.py)
 data = pd.read_pickle("data_files/engineered.pkl")
@@ -81,6 +82,9 @@ env = trading_env(features, returns)
 model = SAC("MlpPolicy", env, verbose=1, learning_rate=1e-4, buffer_size=100000, batch_size=64, tensorboard_log="./tensorboard_logs/", ent_coef="auto") #create the model with tensorboard logging
 
 model.learn(total_timesteps=500000) #train the model
-model.save("sac_training_model") #save the model
 
-print("Model trained and saved")
+timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+save_path = f"rl/model/sac_model_{timestamp}"
+model.save(save_path) #save the model with a unique timestamp
+
+print(f"Model trained and saved to {save_path}")
