@@ -35,7 +35,7 @@ class trading_env(gym.Env):
 
     #get the observation of the current state
     def getObservation(self):
-        return np.concatenate([self.features[self.t], self.weights]).astype(np.float32) #concatenate the features and the weights to get the observation
+        return np.concatenate([self.features[self.t], self.weights]).astype(np.float32) #concatenate the features of the current time and the weights to get the observation
 
     #reset the environment to the initial state
     def reset(self, seed=None, options=None):

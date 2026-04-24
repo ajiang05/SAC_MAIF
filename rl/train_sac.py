@@ -28,6 +28,8 @@ pivot_features = df_reset.pivot_table(
     aggfunc="first"
 )
 
+print(pivot_features)
+
 pivot_features = pivot_features.ffill().bfill() 
 
 pivot_features.columns = [
