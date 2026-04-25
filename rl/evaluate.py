@@ -4,6 +4,7 @@ import numpy as np
 from stable_baselines3 import SAC
 import pickle #loads saved data (scaler)
 import matplotlib.pyplot as plt
+import glob
 
 #Load the training data (same as test_env.py)
 data = pd.read_pickle("data_files/engineered.pkl")
@@ -93,8 +94,9 @@ returns = returns[["SPY", "QQQ", "TLT"]] #only keeps the returns for the tickers
 #Create the environment for the model
 env = trading_env(features, returns)
 
-#Load the model
-model = SAC.load("sac_training_model") #load the model
+#Load the most recently saved model
+latest_model = sorted(glob.glob("rl/model/sac_model_*.zip"))[-1]
+model = SAC.load(latest_model)
 obs, _ = env.reset() #reset the environment
 model_rewards = []
 #Loop through the returns and step the environment forward by one time step
@@ -116,10 +118,10 @@ for i in range(len(env_random.returns)):
     if done: 
         break
 
-#sharpe ratio of the model
+#sharpe ratio of the model (annualized)
 def sharpe(returns):
     returns = np.array(returns)
-    return returns.mean() / (returns.std() + 1e-8) #add a small epsilon to avoid division by zero
+    return (returns.mean() / (returns.std() + 1e-8)) * np.sqrt(252)
 
 #calculate the sharpe ratio of the model and the random agent
 model_sharpe = sharpe(env.portfolioReturns)
@@ -130,7 +132,7 @@ print(f"Random Sharpe: {random_sharpe}")
 
 #equal weight baseline (equal weight of the returns for each ticker)
 equal_returns = returns.mean(axis=1) 
-equal_sharpe = equal_returns.mean() / (equal_returns.std() + 1e-8)
+equal_sharpe = (equal_returns.mean() / (equal_returns.std() + 1e-8)) * np.sqrt(252) # annualized
 
 print(f"Equal-weight Sharpe: {equal_sharpe}")
 
@@ -138,6 +140,15 @@ if model_sharpe > random_sharpe:
     print("The model is better than the random agent")
 else:
     print("The random agent is better than the model")
+
+#calmar ratio and max drawdown
+cum_for_metrics = pd.Series(env.portfolioReturns).cumsum()
+max_dd = (cum_for_metrics - cum_for_metrics.cummax()).min()
+annualized_return = np.mean(env.portfolioReturns) * 252
+calmar = annualized_return / (abs(max_dd) + 1e-8)
+print(f"Max Drawdown: {max_dd:.2%}")
+print(f"Annualized Return: {annualized_return:.2%}")
+print(f"Calmar Ratio: {calmar:.2f}")
 
 
 print(action)
@@ -166,12 +177,15 @@ plt.xlabel("Date")
 plt.ylabel("Cumulative Return")
 plt.show()
 
-#plots the cumulative returns for the model and the equal weight baseline
+#plots the cumulative returns for the model, equal weight baseline, and random agent
+cum_random = pd.Series(env_random.portfolioReturns, index=returns.index[:len(env_random.portfolioReturns)]).cumsum()
+
 plt.figure()
 plt.plot(cum_model, label="Model")
 plt.plot(cum_equal, label="Equal-weight")
+plt.plot(cum_random, label="Random")
 plt.legend()
-plt.title("Model vs Equal-weight")
+plt.title("Model vs Equal-weight vs Random")
 plt.xlabel("Date")
 plt.ylabel("Cumulative Return")
 plt.show()
@@ -180,6 +194,7 @@ cum = cum_model
 drawdown = cum - cum.cummax()
 
 #plots the drawdown for the model
+plt.figure()
 plt.plot(drawdown)
 plt.title("Drawdown")
 plt.show()
