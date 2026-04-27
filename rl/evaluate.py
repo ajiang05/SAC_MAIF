@@ -56,8 +56,8 @@ price_df = price_df.loc[common_index]
 
 
 features = pivot_features.iloc[1:]
-ret_1 = price_df.pct_change().iloc[1:] #returns for the next day
-ret_5 = price_df.pct_change(5).iloc[1:] #returns for the next 5 days
+ret_1 = price_df.pct_change().shift(1).iloc[1:] #returns for yesterday
+ret_5 = price_df.pct_change(5).shift(1).iloc[1:] #returns for the past 5 days
 
 print("Pivot features sample:")
 print(pivot_features.head())
@@ -95,7 +95,7 @@ returns = returns[["SPY", "QQQ", "TLT"]] #only keeps the returns for the tickers
 env = trading_env(features, returns)
 
 #Load the most recently saved model
-latest_model = sorted(glob.glob("rl/model/sac_model_*.zip"))[-1]
+latest_model = "rl/model/sac_training_model.zip"
 model = SAC.load(latest_model)
 obs, _ = env.reset() #reset the environment
 model_rewards = []

@@ -28,8 +28,8 @@ price_df = df_reset.pivot(index="Date", columns="Ticker", values="Close")
 returns = price_df.pct_change().dropna() 
 
 features = pivot_features.iloc[1:]
-ret_1 = price_df.pct_change().iloc[1:]
-ret_5 = price_df.pct_change(5).iloc[1:]
+ret_1 = price_df.pct_change().shift(1).iloc[1:]
+ret_5 = price_df.pct_change(5).shift(1).iloc[1:]
 ret_1 = ret_1.loc[features.index]
 ret_5 = ret_5.loc[features.index]
 
