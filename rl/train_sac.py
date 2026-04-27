@@ -70,7 +70,8 @@ features = (features - mean) / std
 with open("scaler.pkl", "wb") as f:
     pickle.dump((mean, std), f)
 
-returns = returns[["SPY", "QQQ", "TLT"]] #only keeps the returns for the tickers
+returns = returns[["SPY", "QQQ", "TLT"]].copy() #only keeps the returns for the tickers
+returns["Cash"] = 0.0 # Adds cash asset with 0% return
 
 print("Features shape:", features.shape) 
 print("Returns shape:", returns.shape)
@@ -79,7 +80,7 @@ print("Returns shape:", returns.shape)
 #Create the environment
 env = trading_env(features, returns)
 
-model = SAC("MlpPolicy", env, verbose=1, learning_rate=1e-4, buffer_size=100000, batch_size=64, tensorboard_log="./tensorboard_logs/", ent_coef="auto") #create the model with tensorboard logging
+model = SAC("MlpPolicy", env, verbose=1, learning_rate=0.00047192477864167786, buffer_size=200000, batch_size=256, tensorboard_log="./tensorboard_logs/", ent_coef=0.01) #create the model with tensorboard logging
 
 model.learn(total_timesteps=500000) #train the model
 

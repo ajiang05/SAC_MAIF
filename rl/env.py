@@ -9,7 +9,7 @@ class trading_env(gym.Env):
         self.features =  features.values
         #It is the number how how the INDEX changed 
         self.returns = returns.values
-        self.tickers = ['SPY', 'QQQ', 'TLT']
+        self.tickers = ['SPY', 'QQQ', 'TLT', 'Cash']
         self.numAssets = self.returns.shape[1] #number of assets in the portfolio
         self.observationDimension = self.features.shape[1] + self.numAssets #observation space is the range of possible observations the agent can see
 

@@ -41,7 +41,8 @@ mean = features.iloc[:252].mean()
 std = features.iloc[:252].std() + 1e-8
 features = (features - mean) / std
 
-returns = returns[["SPY", "QQQ", "TLT"]] 
+returns = returns[["SPY", "QQQ", "TLT"]].copy() 
+returns["Cash"] = 0.0 # Adds cash asset with 0% return
 
 # Create the training environment
 env = trading_env(features, returns)
