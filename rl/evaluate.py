@@ -88,7 +88,8 @@ features = (features - mean) / std #normalizes the features using the mean and s
 
 # align returns
 returns = returns.loc[features.index]
-returns = returns[["SPY", "QQQ", "TLT"]] #only keeps the returns for the tickers
+returns = returns[["SPY", "QQQ", "TLT"]].copy() #only keeps the returns for the tickers
+returns["Cash"] = 0.0 # Adds cash asset with 0% return
 
 
 #Create the environment for the model
