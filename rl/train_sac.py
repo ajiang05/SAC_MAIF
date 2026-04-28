@@ -6,7 +6,7 @@ import pickle
 import datetime
 
 #Load the training data (same as test_env.py)
-data = pd.read_pickle("data_files/engineered.pkl")
+data = pd.read_pickle("../data_files/engineered.pkl")
 train_data = data["train"]
 
 feature_cols = [

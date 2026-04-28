@@ -1,200 +1,162 @@
+import pickle
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from env import trading_env
-import numpy as np
+from regime_hmm import expected_risk_scale_series, load_risk_model
 from stable_baselines3 import SAC
-import pickle #loads saved data (scaler)
-import matplotlib.pyplot as plt
-import glob
 
-#Load the training data (same as test_env.py)
-data = pd.read_pickle("data_files/engineered.pkl")
+_RL_DIR = Path(__file__).resolve().parent
+_ROOT = _RL_DIR.parent
+
+# Load engineered data (run from repo root or rl/ — paths are absolute via _ROOT)
+data = pd.read_pickle(_ROOT / "data_files" / "engineered.pkl")
 test_data = data["test"]
 
 feature_cols = [
     "Close", "High", "Low", "Open", "Volume",
     "Past_close", "RSI", "BB_Mid", "BB_Upper", "BB_Lower",
-    "MACD", "MACD_signal"
+    "MACD", "MACD_signal",
 ]
 
-#turns the row labels to just 0 to whatever number of rows there are
-df_reset = test_data.reset_index() 
-
-#check to see if there are any duplicates
+df_reset = test_data.reset_index()
 print(df_reset.groupby(["Date", "Ticker"]).size().value_counts())
- 
-#Makes all the tickers and indicators in one row with only dates as the row label, and the indicators as the columns
+
 pivot_features = df_reset.pivot_table(
     index="Date",
     columns="Ticker",
     values=feature_cols,
-    aggfunc="first"
+    aggfunc="first",
 )
+pivot_features = pivot_features.ffill().bfill()
+pivot_features.columns = [f"{col[1]}_{col[0]}" for col in pivot_features.columns]
 
-pivot_features = pivot_features.ffill().bfill() 
+price_df = df_reset.pivot(index="Date", columns="Ticker", values="Close")
+returns = price_df.pct_change().dropna()
 
-#Makes the columns names more readable for example (Close, SPY) To: SPY_Close
-pivot_features.columns = [
-    f"{col[1]}_{col[0]}" for col in pivot_features.columns 
-]
-
-#price table that shows the closing prices of the tickers for each date
-price_df = df_reset.pivot(
-index="Date",
-columns="Ticker",
-values="Close" 
-)
-
-#returns table that shows the percentage change in the closing prices of the tickers for each date
-returns = price_df.pct_change().dropna() 
-
-#aligns the index of the pivot features and the price df by taking dates that are in both
 common_index = pivot_features.index.intersection(price_df.index)
-
-#only keeping dates that are in both the pivot features and the price df
-pivot_features = pivot_features.loc[common_index] 
+pivot_features = pivot_features.loc[common_index]
 price_df = price_df.loc[common_index]
 
-
 features = pivot_features.iloc[1:]
-ret_1 = price_df.pct_change().shift(1).iloc[1:] #returns for yesterday
-ret_5 = price_df.pct_change(5).shift(1).iloc[1:] #returns for the past 5 days
+ret_1 = price_df.pct_change().shift(1).iloc[1:]
+ret_5 = price_df.pct_change(5).shift(1).iloc[1:]
 
-print("Pivot features sample:")
-print(pivot_features.head())
-
-print("\nPrice DF sample:")
-print(price_df.head())
-
-print("\nCheck if price_df columns differ:")
-print(price_df.iloc[0])
-
-features = pd.concat([features, ret_1, ret_5], axis=1) #concatenates the features and the returns to make one big dataframe
-
-# remove NaNs
+features = pd.concat([features, ret_1, ret_5], axis=1)
 features = features.dropna()
-
-# aligns the returns to the features
 returns = returns.loc[features.index]
 
-#loads the scaler that was used to normalize the data
-with open("scaler.pkl", "rb") as f:
+with open(_RL_DIR / "scaler.pkl", "rb") as f:
     mean, std = pickle.load(f)
 
-
-print("RAW FEATURES CHECK:")
-print(features[["SPY_Close", "QQQ_Close", "TLT_Close"]].head())
-
-features = (features - mean) / std #normalizes the features using the mean and std of the training data
-
-# align returns
+features = (features - mean) / std
 returns = returns.loc[features.index]
-returns = returns[["SPY", "QQQ", "TLT"]] #only keeps the returns for the tickers
+returns = returns[["SPY", "QQQ", "TLT"]]
+
+print("Features shape:", features.shape, "Returns shape:", returns.shape)
+
+model_path = _RL_DIR / "model" / "sac_training_model.zip"
+model = SAC.load(model_path)
 
 
-#Create the environment for the model
-env = trading_env(features, returns)
+def sharpe(rets):
+    rets = np.array(rets)
+    return (rets.mean() / (rets.std() + 1e-8)) * np.sqrt(252)
 
-#Load the most recently saved model
-latest_model = "rl/model/sac_training_model.zip"
-model = SAC.load(latest_model)
-obs, _ = env.reset() #reset the environment
-model_rewards = []
-#Loop through the returns and step the environment forward by one time step
-for i in range(len(env.returns)): #loop through the returns
-    action, _ = model.predict(obs) #predict the action
-    obs, reward, done, _, _ = env.step(action) #step the environment forward by one time step
-    model_rewards.append(reward)
-    if done: #if the episode is done
-        break
 
-#Create the environment for the random agent (same as env)
-env_random = trading_env(features, returns)
-obs_random, _ = env_random.reset() 
-random_rewards = []
-for i in range(len(env_random.returns)): 
-    action = env_random.action_space.sample() #sample a random action from the action space
-    obs_random, reward, done, _, _ = env_random.step(action)
-    random_rewards.append(reward)
-    if done: 
-        break
+def run_sac_backtest(env, sac_model, deterministic=True):
+    obs, _ = env.reset()
+    for _ in range(len(env.returns)):
+        action, _ = sac_model.predict(obs, deterministic=deterministic)
+        obs, _, done, _, _ = env.step(action)
+        if done:
+            break
+    return env.portfolioReturns
 
-#sharpe ratio of the model (annualized)
-def sharpe(returns):
-    returns = np.array(returns)
-    return (returns.mean() / (returns.std() + 1e-8)) * np.sqrt(252)
 
-#calculate the sharpe ratio of the model and the random agent
-model_sharpe = sharpe(env.portfolioReturns)
-random_sharpe = sharpe(env_random.portfolioReturns)
+# --- SAC only (baseline)
+env_sac = trading_env(features, returns)
+port_sac = run_sac_backtest(env_sac, model)
 
-print(f"Model Sharpe: {model_sharpe}")
-print(f"Random Sharpe: {random_sharpe}")
-
-#equal weight baseline (equal weight of the returns for each ticker)
-equal_returns = returns.mean(axis=1) 
-equal_sharpe = (equal_returns.mean() / (equal_returns.std() + 1e-8)) * np.sqrt(252) # annualized
-
-print(f"Equal-weight Sharpe: {equal_sharpe}")
-
-if model_sharpe > random_sharpe:
-    print("The model is better than the random agent")
+# --- SAC + HMM regime scaling
+risk_path = _RL_DIR / "risk_model.pkl"
+if not risk_path.is_file():
+    print(
+        "\nNo risk_model.pkl — run:  python regime_hmm.py\n"
+        "from the rl folder (or: python -m rl.regime_hmm from repo root if packaged).\n"
+        "Skipping HMM overlay.\n"
+    )
+    port_hmm = None
 else:
-    print("The random agent is better than the model")
+    bundle = load_risk_model(risk_path)
+    risk_scale = expected_risk_scale_series(bundle, returns)
+    assert risk_scale.index.equals(returns.index), "Risk scale index must match returns"
+    env_hmm = trading_env(features, returns, daily_risk_scale=risk_scale.values)
+    port_hmm = run_sac_backtest(env_hmm, model)
 
-#calmar ratio and max drawdown
-cum_for_metrics = pd.Series(env.portfolioReturns).cumsum()
+# --- Random baseline
+env_random = trading_env(features, returns)
+obs_r, _ = env_random.reset()
+for _ in range(len(env_random.returns)):
+    action = env_random.action_space.sample()
+    obs_r, _, done, _, _ = env_random.step(action)
+    if done:
+        break
+
+model_sharpe = sharpe(port_sac)
+random_sharpe = sharpe(env_random.portfolioReturns)
+equal_returns = returns.mean(axis=1)
+equal_sharpe = (equal_returns.mean() / (equal_returns.std() + 1e-8)) * np.sqrt(252)
+
+print(f"\nSAC Sharpe: {model_sharpe:.4f}")
+if port_hmm is not None:
+    print(f"SAC + HMM Sharpe: {sharpe(port_hmm):.4f}")
+print(f"Random Sharpe: {random_sharpe:.4f}")
+print(f"Equal-weight Sharpe: {equal_sharpe:.4f}")
+
+cum_for_metrics = pd.Series(port_sac).cumsum()
 max_dd = (cum_for_metrics - cum_for_metrics.cummax()).min()
-annualized_return = np.mean(env.portfolioReturns) * 252
+annualized_return = float(np.mean(port_sac) * 252)
 calmar = annualized_return / (abs(max_dd) + 1e-8)
-print(f"Max Drawdown: {max_dd:.2%}")
-print(f"Annualized Return: {annualized_return:.2%}")
-print(f"Calmar Ratio: {calmar:.2f}")
+print(f"\nSAC - Max Drawdown (cum sum space): {max_dd:.2%}")
+print(f"SAC - Annualized Return (mean*252): {annualized_return:.2%}")
+print(f"SAC - Calmar: {calmar:.2f}")
 
+if port_hmm is not None:
+    cum_h = pd.Series(port_hmm).cumsum()
+    max_dd_h = (cum_h - cum_h.cummax()).min()
+    ann_h = float(np.mean(port_hmm) * 252)
+    print(f"\nSAC+HMM - Max Drawdown: {max_dd_h:.2%}")
+    print(f"SAC+HMM - Annualized Return: {ann_h:.2%}")
+    print(f"SAC+HMM - Calmar: {ann_h / (abs(max_dd_h) + 1e-8):.2f}")
 
-print(action)
-
-print("Mean return:", np.mean(env.portfolioReturns))
-print("Volatility:", np.std(env.portfolioReturns))
-
-
-# Align model returns with dates
-model_series = pd.Series(
-    env.portfolioReturns,
-    index=returns.index[:len(env.portfolioReturns)]
-)
-
-
-#Graphs:
-
-cum_model = model_series.cumsum() #total growth over time
-cum_equal = returns.mean(axis=1).iloc[:len(model_series)].cumsum() #total growth over time for the equal weight baseline
-
-#plots the cumulative returns for the model
-plt.figure()
-plt.plot(cum_model)
-plt.title("Model Cumulative Returns (Test Set)")
-plt.xlabel("Date")
-plt.ylabel("Cumulative Return")
-plt.show()
-
-#plots the cumulative returns for the model, equal weight baseline, and random agent
-cum_random = pd.Series(env_random.portfolioReturns, index=returns.index[:len(env_random.portfolioReturns)]).cumsum()
+idx = returns.index[: len(port_sac)]
+model_series = pd.Series(port_sac, index=idx)
+cum_model = model_series.cumsum()
+cum_equal = returns.mean(axis=1).iloc[: len(model_series)].cumsum()
+cum_random = pd.Series(env_random.portfolioReturns, index=returns.index[: len(env_random.portfolioReturns)]).cumsum()
 
 plt.figure()
-plt.plot(cum_model, label="Model")
+plt.plot(cum_model, label="SAC")
+if port_hmm is not None:
+    plt.plot(pd.Series(port_hmm, index=idx).cumsum(), label="SAC + HMM")
 plt.plot(cum_equal, label="Equal-weight")
 plt.plot(cum_random, label="Random")
 plt.legend()
-plt.title("Model vs Equal-weight vs Random")
+plt.title("Test set — cumulative simple returns")
 plt.xlabel("Date")
-plt.ylabel("Cumulative Return")
+plt.ylabel("Cumulative return")
+plt.tight_layout()
 plt.show()
 
-cum = cum_model
-drawdown = cum - cum.cummax()
-
-#plots the drawdown for the model
 plt.figure()
-plt.plot(drawdown)
-plt.title("Drawdown")
+plt.plot(cum_model - cum_model.cummax(), label="SAC")
+if port_hmm is not None:
+    ch = pd.Series(port_hmm, index=idx).cumsum()
+    plt.plot(ch - ch.cummax(), label="SAC + HMM")
+plt.legend()
+plt.title("Drawdown (cumulative return space)")
+plt.tight_layout()
 plt.show()

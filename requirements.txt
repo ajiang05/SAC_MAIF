@@ -1,7 +1,8 @@
 yfinance
-alpaca-trade-api
 pandas
 numpy
-stable-baselines3[extra]
+stable-baselines3
 tensorboard
 optuna
+hmmlearn
+joblib
