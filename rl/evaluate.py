@@ -46,6 +46,7 @@ values="Close"
 
 #returns table that shows the percentage change in the closing prices of the tickers for each date
 returns = price_df.pct_change().dropna() 
+returns = returns.shift(-1) # Shift returns backwards so day t features predict day t+1 returns
 
 #aligns the index of the pivot features and the price df by taking dates that are in both
 common_index = pivot_features.index.intersection(price_df.index)
@@ -70,11 +71,12 @@ print(price_df.iloc[0])
 
 features = pd.concat([features, ret_1, ret_5], axis=1) #concatenates the features and the returns to make one big dataframe
 
-# remove NaNs
+# removes NaNs
 features = features.dropna()
 
-# aligns the returns to the features
-returns = returns.loc[features.index]
+# aligns the returns to the features and drops the final day which has no tomorrow
+returns = returns.loc[features.index].dropna()
+features = features.loc[returns.index]
 
 #loads the scaler that was used to normalize the data
 with open("scaler.pkl", "rb") as f:
@@ -96,13 +98,51 @@ returns["Cash"] = 0.0 # Adds cash asset with 0% return
 env = trading_env(features, returns)
 
 #Load the most recently saved model
-latest_model = "rl/model/sac_training_model.zip"
+latest_model = "rl/model/sac_model_20260427_193350"
 model = SAC.load(latest_model)
+
+# --- LOAD RISK OVERLAY (HMM) ---
+with open("rl/model/hmm_model.pkl", "rb") as f:
+    hmm_model, state_map = pickle.load(f)
+spy_series = price_df["SPY"].pct_change().dropna() # Full history of SPY for HMM
+# -------------------------------
+
 obs, _ = env.reset() #reset the environment
 model_rewards = []
 #Loop through the returns and step the environment forward by one time step
 for i in range(len(env.returns)): #loop through the returns
-    action, _ = model.predict(obs) #predict the action
+    action, _ = model.predict(obs, deterministic=True) #predict the action deterministically
+    
+    # --- APPLY RISK OVERLAY ---
+    current_date = features.index[i]
+    loc_idx = spy_series.index.get_loc(current_date)
+    # Get last 10 days of SPY returns to predict current regime
+    recent_spy = spy_series.iloc[max(0, loc_idx-9):loc_idx+1].values.reshape(-1, 1)
+    
+    regime_id = hmm_model.predict(recent_spy)[-1]
+    regime = state_map[regime_id]
+    
+    # Set the risk limit
+    if regime == "Calm":
+        multiplier = 1.0
+    elif regime == "Moderate":
+        multiplier = 0.6
+    else: # Stress
+        multiplier = 0.2
+        
+    # Figure out what the SAC agent wanted to do
+    w = (action + 1) / 2
+    w = np.clip(w, 0, 1)
+    w = w / w.sum() if w.sum() > 0 else np.ones(4) / 4
+        
+    # Force the agent to obey the risk limit by shifting money to Cash
+    w[0:3] = w[0:3] * multiplier
+    w[3] = 1.0 - w[0:3].sum() # Put the remainder in cash
+    
+    # Convert weights back into the format env.py expects
+    action = (w * 2) - 1
+    # --------------------------
+
     obs, reward, done, _, _ = env.step(action) #step the environment forward by one time step
     model_rewards.append(reward)
     if done: #if the episode is done

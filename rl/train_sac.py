@@ -44,7 +44,9 @@ values="Close"
 )
 
 #creates a df for the percent change between current row and previous row. Basically yesterday to today percent change
-returns = price_df.pct_change().dropna() 
+returns = price_df.pct_change().dropna()
+returns = returns.shift(-1) # Shift returns backwards so day t features predict day t+1 returns
+
 
 #We get rid of row 0 to match with returns which got rid of first day(there is no yesterday yet)
 features = pivot_features.iloc[1:]
@@ -58,7 +60,8 @@ ret_5 = ret_5.loc[features.index]
 
 features = pd.concat([features, ret_1, ret_5], axis=1) #concatenates the features and the returns to make one big dataframe
 features = features.dropna()
-returns = returns.loc[features.index]
+returns = returns.loc[features.index].dropna() # drop last row which has no next day return
+features = features.loc[returns.index] # align features with returns
 
 #Normalizing the features
 mean = features.iloc[:252].mean()
@@ -80,6 +83,7 @@ print("Returns shape:", returns.shape)
 #Create the environment
 env = trading_env(features, returns)
 
+#These are good hyperparameters DO NOT CHANGE
 model = SAC("MlpPolicy", env, verbose=1, learning_rate=0.00047192477864167786, buffer_size=200000, batch_size=256, tensorboard_log="./tensorboard_logs/", ent_coef=0.01) #create the model with tensorboard logging
 
 model.learn(total_timesteps=500000) #train the model

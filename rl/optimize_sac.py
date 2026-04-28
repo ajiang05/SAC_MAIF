@@ -26,6 +26,7 @@ pivot_features.columns = [f"{col[1]}_{col[0]}" for col in pivot_features.columns
 
 price_df = df_reset.pivot(index="Date", columns="Ticker", values="Close")
 returns = price_df.pct_change().dropna() 
+returns = returns.shift(-1) # Shift returns backwards so day t features predict day t+1 returns
 
 features = pivot_features.iloc[1:]
 ret_1 = price_df.pct_change().shift(1).iloc[1:]
@@ -34,7 +35,8 @@ ret_1 = ret_1.loc[features.index]
 ret_5 = ret_5.loc[features.index]
 
 features = pd.concat([features, ret_1, ret_5], axis=1).dropna()
-returns = returns.loc[features.index]
+returns = returns.loc[features.index].dropna()
+features = features.loc[returns.index]
 
 # Normalize
 mean = features.iloc[:252].mean()
