@@ -3,7 +3,7 @@ from gymnasium import spaces #spaces is a module for creating and interacting wi
 import numpy as np #numpy is a library for numerical computing
 
 class trading_env(gym.Env):
-    def __init__(self, features, returns):
+    def __init__(self, features, returns, daily_risk_scale=None):
         super().__init__()
         #Get the values so it gets rid of column and row names. This is better for RL models because they suck at reading row/col names
         self.features =  features.values
@@ -17,6 +17,15 @@ class trading_env(gym.Env):
         self.observation_space = spaces.Box(low = -np.inf, high = np.inf, shape = (self.observationDimension,), dtype = np.float32) #observation space is the range of possible observations the agent can see
 
         self.max_steps = len(self.returns)
+
+        if daily_risk_scale is not None:
+            self.daily_risk_scale = np.asarray(daily_risk_scale, dtype=np.float64)
+            if len(self.daily_risk_scale) != len(self.returns):
+                raise ValueError(
+                    f"daily_risk_scale length {len(self.daily_risk_scale)} != returns length {len(self.returns)}"
+                )
+        else:
+            self.daily_risk_scale = None
 
         self.reset() #reset the environment to the initial state
 
@@ -53,7 +62,13 @@ class trading_env(gym.Env):
         assetReturns = self.returns[self.t] #get the asset returns for the current time step
         window = self.returns[max(0, self.t - 60):self.t+1] #get the window of returns for the last 20 time steps
         volatility = np.std(window) + 1e-8 #add a small epsilon to avoid division by zero
-        portfolioReturn = np.dot(assetReturns, newWeights) #calculate the portfolio return (profit or loss)
+        # Full risky-asset return; regime scales *exposure* (fraction in risky book), cash earns 0
+        base_return = np.dot(assetReturns, newWeights)
+        if self.daily_risk_scale is not None:
+            g = float(np.clip(self.daily_risk_scale[self.t], 0.0, 1.0))
+            portfolioReturn = g * base_return
+        else:
+            portfolioReturn = base_return
         turnover = np.sum(np.abs(newWeights - previousWeights)) #The turnover punishes protfolio weight changes 
 
         if self.t >= 60:
