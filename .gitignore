@@ -32,6 +32,10 @@ runs/
 logs/
 tensorboard_logs/
 
+# Local training / regime artifacts (regenerate with train_sac.py / regime_hmm.py)
+rl/scaler.pkl
+rl/risk_model.pkl
+
 # OS generated files
 .DS_Store
 .DS_Store?
