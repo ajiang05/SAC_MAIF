@@ -35,6 +35,9 @@ pivot_features.columns = [f"{col[1]}_{col[0]}" for col in pivot_features.columns
 
 price_df = df_reset.pivot(index="Date", columns="Ticker", values="Close")
 returns = price_df.pct_change().dropna()
+#returns table that shows the percentage change in the closing prices of the tickers for each date
+returns = price_df.pct_change().dropna() 
+returns = returns.shift(-1) # Shift returns backwards so day t features predict day t+1 returns
 
 common_index = pivot_features.index.intersection(price_df.index)
 pivot_features = pivot_features.loc[common_index]
@@ -53,7 +56,63 @@ with open(_RL_DIR / "scaler.pkl", "rb") as f:
 
 features = (features - mean) / std
 returns = returns.loc[features.index]
-returns = returns[["SPY", "QQQ", "TLT"]]
+returns = returns[["SPY", "QQQ", "TLT"]].copy() #only keeps the returns for the tickers
+returns["Cash"] = 0.0 # Adds cash asset with 0% return
+
+
+#Create the environment for the model
+env = trading_env(features, returns)
+
+#Load the most recently saved model
+latest_model = "rl/model/sac_model_20260427_193350"
+model = SAC.load(latest_model)
+
+# --- LOAD RISK OVERLAY (HMM) ---
+with open("rl/model/hmm_model.pkl", "rb") as f:
+    hmm_model, state_map = pickle.load(f)
+spy_series = price_df["SPY"].pct_change().dropna() # Full history of SPY for HMM
+# -------------------------------
+
+obs, _ = env.reset() #reset the environment
+model_rewards = []
+#Loop through the returns and step the environment forward by one time step
+for i in range(len(env.returns)): #loop through the returns
+    action, _ = model.predict(obs, deterministic=True) #predict the action deterministically
+    
+    # --- APPLY RISK OVERLAY ---
+    current_date = features.index[i]
+    loc_idx = spy_series.index.get_loc(current_date)
+    # Get last 10 days of SPY returns to predict current regime
+    recent_spy = spy_series.iloc[max(0, loc_idx-9):loc_idx+1].values.reshape(-1, 1)
+    
+    regime_id = hmm_model.predict(recent_spy)[-1]
+    regime = state_map[regime_id]
+    
+    # Set the risk limit
+    if regime == "Calm":
+        multiplier = 1.0
+    elif regime == "Moderate":
+        multiplier = 0.6
+    else: # Stress
+        multiplier = 0.2
+        
+    # Figure out what the SAC agent wanted to do
+    w = (action + 1) / 2
+    w = np.clip(w, 0, 1)
+    w = w / w.sum() if w.sum() > 0 else np.ones(4) / 4
+        
+    # Force the agent to obey the risk limit by shifting money to Cash
+    w[0:3] = w[0:3] * multiplier
+    w[3] = 1.0 - w[0:3].sum() # Put the remainder in cash
+    
+    # Convert weights back into the format env.py expects
+    action = (w * 2) - 1
+    # --------------------------
+
+    obs, reward, done, _, _ = env.step(action) #step the environment forward by one time step
+    model_rewards.append(reward)
+    if done: #if the episode is done
+        break
 
 print("Features shape:", features.shape, "Returns shape:", returns.shape)
 
