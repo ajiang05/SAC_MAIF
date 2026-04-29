@@ -35,7 +35,7 @@ price_df = df_reset.pivot(index="Date", columns="Ticker", values="Close")
 spy_returns = price_df["SPY"].pct_change().dropna().values.reshape(-1, 1)
 
 
-# --- 2. Build and Train the HMM ---
+#2. Build and Train the HMM
 print("Training Hidden Markov Model (HMM)...")
 # We specify 3 components (Calm, Moderate, Stress)
 # covariance_type="diag" means we assume variance is independent
@@ -46,7 +46,7 @@ hmm_model = GaussianHMM(n_components=3, covariance_type="diag", n_iter=100, rand
 hmm_model.fit(spy_returns)
 
 
-# --- 3. Identify Which State is Which ---
+#3. Identify Which State is Which
 # The HMM randomly assigns states as 0, 1, and 2. 
 # We need to sort them by volatility (variance) so we know which one is "Stress"
 # hmm_model.covars_ holds the variance of each state
@@ -68,7 +68,7 @@ for internal_id, name in state_map.items():
     print(f"State {internal_id} -> {name} (Annualized Vol: {vol:.2%})")
 
 
-# --- 4. Save the Model and the Map ---
+#4. Save the Model and the Map
 print("\nSaving HMM model to rl/model/hmm_model.pkl...")
 with open("rl/model/hmm_model.pkl", "wb") as f:
     # We save both the model AND the map so evaluate.py knows what state means what
