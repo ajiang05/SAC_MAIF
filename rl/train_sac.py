@@ -4,9 +4,12 @@ import numpy as np
 from stable_baselines3 import SAC
 import pickle
 import datetime
+from pathlib import Path
 
 #Load the training data (same as test_env.py)
-data = pd.read_pickle("../data_files/engineered.pkl")
+
+ROOT = Path(__file__).resolve().parent.parent
+data = pd.read_pickle(ROOT / "data_files" / "engineered.pkl")
 train_data = data["train"]
 
 feature_cols = [
@@ -89,7 +92,7 @@ model = SAC("MlpPolicy", env, verbose=1, learning_rate=0.00047192477864167786, b
 model.learn(total_timesteps=500000) #train the model
 
 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-save_path = f"rl/model/sac_model_{timestamp}"
+save_path = f"rl/model/sac_model_{timestamp}_Sherry"
 model.save(save_path) #save the model with a unique timestamp
 
 print(f"Model trained and saved to {save_path}")
