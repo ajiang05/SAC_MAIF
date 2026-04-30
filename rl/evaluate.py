@@ -12,7 +12,7 @@ _ROOT = _RL_DIR.parent
 
 # Load engineered data (run from repo root or rl/ — paths are absolute via _ROOT)
 data = pd.read_pickle(_ROOT / "data_files" / "engineered.pkl")
-test_data = data["test"]
+test_data = data["val"]
 
 feature_cols = [
     "Close", "High", "Low", "Open", "Volume",

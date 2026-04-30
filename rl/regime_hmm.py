@@ -27,7 +27,7 @@ MULTIPLIER_BY_VOL_RANK = np.array([1.0, 0.6, 0.2])
 def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
-
+#This method purely gets data on volotility which is the only information that this regime model needs
 def daily_returns_from_split(split_df: pd.DataFrame) -> pd.DataFrame:
     """
     Extracts the 'Close' prices from the dataset and calculates the daily percentage 
@@ -38,7 +38,11 @@ def daily_returns_from_split(split_df: pd.DataFrame) -> pd.DataFrame:
     r = px.pct_change().dropna()
     return r[TICKERS].dropna()
 
-
+"""
+When the model is done it outputs three probability distributions, but we don't know which 
+graph is which. For example, the calm might be in the third spot or the volatile distribution is in the
+first spot. This method fixes this issue and always makes the orders all the distributions correctly
+"""
 def _canonicalize_hmm_by_vol(hmm: GaussianHMM, order: np.ndarray) -> None:
     """
     Permute HMM states so new id 0 = calmest, 2 = most volatile (order = argsort vol ascending).
@@ -86,6 +90,16 @@ def fit_risk_model_from_pickle(
         raise ValueError(f"Need more train days for HMM; got {len(X)}")
 
     # min_covar avoids near-singular covariances; more n_iter / looser tol reduces "not converging" noise
+    #We have 3 states: Days where market barely move, days where market moves in a healthy way, days where market are violent
+    """
+    Hidden Markov model uses a thing called expectation maximization
+    -At the start the algorithm knows nothing
+    -The Expectation Part: It looks into daily return every and says "Let me take a look at my three bell curves
+    ". Then it says this day is 20% curve 1, 30% curve 2, and 50% curve 3
+    -The Maximization Part: Now that it has guessed probabilities for all the days it recalculates the 
+    varaiance and mean of all the curves.
+    - We repeat Expectation and then Maximization for 2000 iterations
+    """
     hmm = GaussianHMM(
         n_components=N_COMPONENTS,
         covariance_type="diag",
