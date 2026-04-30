@@ -47,9 +47,11 @@ def _canonicalize_hmm_by_vol(hmm: GaussianHMM, order: np.ndarray) -> None:
     o = np.asarray(order, dtype=int)
     hmm.means_ = hmm.means_[o]
     if hmm.covariance_type == "diag":
-        hmm.covars_ = hmm.covars_[o]
+        # hmmlearn's getter returns a 3D matrix even for 'diag', but the setter expects a 2D array.
+        # We bypass the property getter/setter and just reorder the raw internal storage.
+        hmm._covars_ = hmm._covars_[o]
     elif hmm.covariance_type == "full":
-        hmm.covars_ = hmm.covars_[o]
+        hmm._covars_ = hmm._covars_[o]
     else:
         raise NotImplementedError(f"canonicalize for {hmm.covariance_type}")
     hmm.startprob_ = hmm.startprob_[o]
