@@ -29,6 +29,10 @@ def _repo_root() -> Path:
 
 
 def daily_returns_from_split(split_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Extracts the 'Close' prices from the dataset and calculates the daily percentage 
+    change (returns) for the three core tickers (SPY, QQQ, TLT).
+    """
     df = split_df.reset_index()
     px = df.pivot(index="Date", columns="Ticker", values="Close").sort_index()
     r = px.pct_change().dropna()
@@ -43,9 +47,11 @@ def _canonicalize_hmm_by_vol(hmm: GaussianHMM, order: np.ndarray) -> None:
     o = np.asarray(order, dtype=int)
     hmm.means_ = hmm.means_[o]
     if hmm.covariance_type == "diag":
-        hmm.covars_ = hmm.covars_[o]
+        # hmmlearn's getter returns a 3D matrix even for 'diag', but the setter expects a 2D array.
+        # We bypass the property getter/setter and just reorder the raw internal storage.
+        hmm._covars_ = hmm._covars_[o]
     elif hmm.covariance_type == "full":
-        hmm.covars_ = hmm.covars_[o]
+        hmm._covars_ = hmm._covars_[o]
     else:
         raise NotImplementedError(f"canonicalize for {hmm.covariance_type}")
     hmm.startprob_ = hmm.startprob_[o]
@@ -61,6 +67,15 @@ def fit_risk_model_from_pickle(
     out_path: Path | None = None,
     random_state: int = 42,
 ) -> dict:
+    """
+    Main training function for the Hidden Markov Model. 
+    1. Loads the historical training data.
+    2. Trains a 3-state HMM on the historical returns.
+    3. Calculates the actual volatility of the 3 buckets it found.
+    4. Physically re-orders the HMM's internal memory (canonicalize) so that 
+       State 0 is always Calm (multiplier 1.0) and State 2 is always Stress (multiplier 0.2).
+    5. Saves the organized model to the hard drive as risk_model.pkl.
+    """
     pkl_path = pkl_path or _repo_root() / "data_files" / "engineered.pkl"
     out_path = out_path or Path(__file__).resolve().parent / "risk_model.pkl"
 
@@ -117,7 +132,14 @@ def load_risk_model(path: Path | None = None) -> dict:
 
 
 def expected_risk_scale_series(bundle: dict, returns_df: pd.DataFrame) -> pd.Series:
-    """Expected risk scale g_t = sum_k P(state=k|seq) * m_k for each row of returns_df."""
+    """
+    Expected risk scale g_t = sum_k P(state=k|seq) * m_k for each row of returns_df.
+    
+    Instead of rigidly picking just one state (Deterministic), this uses the HMM's 
+    probabilities to calculate a "Soft" multiplier. 
+    If the HMM is 80% sure it's Stress (0.2) and 20% sure it's Moderate (0.6), 
+    it will return a combined risk multiplier of 0.28!
+    """
     tickers = bundle["tickers"]
     X = returns_df[tickers].values.astype(np.float64)
     _, post = bundle["hmm"].score_samples(X)

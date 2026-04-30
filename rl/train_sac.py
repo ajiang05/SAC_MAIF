@@ -92,7 +92,7 @@ model = SAC("MlpPolicy", env, verbose=1, learning_rate=0.00047192477864167786, b
 model.learn(total_timesteps=500000) #train the model
 
 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-save_path = f"rl/model/sac_model_{timestamp}_Sherry"
+save_path = f"rl/model/sac_model_{timestamp}_Aidan"
 model.save(save_path) #save the model with a unique timestamp
 
 print(f"Model trained and saved to {save_path}")
