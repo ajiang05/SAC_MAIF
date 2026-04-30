@@ -1,6 +1,5 @@
 import pickle
 from pathlib import Path
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -56,9 +55,13 @@ with open(_RL_DIR / "scaler.pkl", "rb") as f:
 
 features = (features - mean) / std
 returns = returns.loc[features.index]
-returns = returns[["SPY", "QQQ", "TLT"]].copy() #only keeps the returns for the tickers
-returns["Cash"] = 0.0 # Adds cash asset with 0% return
+returns = returns.dropna()
 
+# keep only assets
+returns = returns[["SPY", "QQQ", "TLT"]].copy()
+returns["Cash"] = 0.0
+#realign features AFTER dropping NaNs
+features = features.loc[returns.index]
 
 #Create the environment for the model
 env = trading_env(features, returns)
@@ -116,7 +119,7 @@ for i in range(len(env.returns)): #loop through the returns
 
 print("Features shape:", features.shape, "Returns shape:", returns.shape)
 
-model_path = _RL_DIR / "model" / "sac_training_model.zip"
+model_path = _RL_DIR / "model" / "sac_model_20260429_193355_Sherry.zip"
 model = SAC.load(model_path)
 
 
