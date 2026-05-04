@@ -118,6 +118,28 @@ random_sharpe = sharpe(env_random.portfolioReturns)
 equal_returns = returns.mean(axis=1)
 equal_sharpe = (equal_returns.mean() / (equal_returns.std() + 1e-8)) * np.sqrt(252)
 
+# --- Equal-weight full metrics
+cum_eq = equal_returns.cumsum()
+max_dd_eq = (cum_eq - cum_eq.cummax()).min()
+ann_return_eq = equal_returns.mean() * 252
+calmar_eq = ann_return_eq / (abs(max_dd_eq) + 1e-8)
+
+print(f"\nEqual-weight - Max Drawdown: {max_dd_eq:.2%}")
+print(f"Equal-weight - Annualized Return: {ann_return_eq:.2%}")
+print(f"Equal-weight - Calmar: {calmar_eq:.2f}")
+
+# --- Random full metrics
+random_returns = np.array(env_random.portfolioReturns)
+
+cum_rand = pd.Series(random_returns).cumsum()
+max_dd_rand = (cum_rand - cum_rand.cummax()).min()
+ann_return_rand = random_returns.mean() * 252
+calmar_rand = ann_return_rand / (abs(max_dd_rand) + 1e-8)
+
+print(f"\nRandom - Max Drawdown: {max_dd_rand:.2%}")
+print(f"Random - Annualized Return: {ann_return_rand:.2%}")
+print(f"Random - Calmar: {calmar_rand:.2f}")
+
 print(f"\nSAC Sharpe: {model_sharpe:.4f}")
 if port_hmm is not None:
     print(f"SAC + HMM Sharpe: {sharpe(port_hmm):.4f}")
@@ -145,6 +167,39 @@ model_series = pd.Series(port_sac, index=idx)
 cum_model = model_series.cumsum()
 cum_equal = returns.mean(axis=1).iloc[: len(model_series)].cumsum()
 cum_random = pd.Series(env_random.portfolioReturns, index=returns.index[: len(env_random.portfolioReturns)]).cumsum()
+
+
+# --- Combine ALL splits (fixed key)
+full_data = pd.concat([data["train"], data["val"], data["test"]])
+
+# --- Create price dataframe
+df_reset = full_data.reset_index()
+price_df = df_reset.pivot(index="Date", columns="Ticker", values="Close")
+
+plt.figure()
+
+plt.plot(price_df.index, price_df["SPY"], color="black", linewidth=1.5)
+
+plt.axvspan(pd.to_datetime('2020-02-01'),
+            pd.to_datetime('2020-06-01'),
+            alpha=0.15)
+
+
+plt.text(pd.to_datetime('2020-03-01'),
+         price_df["SPY"].min() + 140,
+         "High Volatility",
+         fontsize=10)
+
+plt.title("Market Regimes and Volatility (SPY)")
+plt.xlabel("Date")
+plt.ylabel("Price")
+
+plt.xticks(fontsize=9)
+plt.yticks(fontsize=9)
+
+plt.grid(False)
+plt.tight_layout()
+plt.show()
 
 plt.figure()
 plt.plot(cum_model, label="SAC")
